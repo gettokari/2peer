@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decentralized Chat</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gun/0.2020.520/gun.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gun/0.2020.520/sea.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.3.2/dist/peerjs.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: row;
+            height: 100vh;
+            margin: 0;
+            background: #36393f;
+            color: white;
+        }
+        #sidebar {
+            width: 20%;
+            background: #2c2f33;
+            padding: 10px;
+        }
+        #chat-container {
+            width: 80%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 10px;
+        }
+        #messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            background: #40444b;
+            padding: 10px;
+            border-radius: 5px;
+            height: 70vh;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+            background: #40444b;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #message {
+            flex-grow: 1;
+            padding: 10px;
+            border-radius: 5px;
+            border: none;
+            background: #2c2f33;
+            color: white;
+        }
+        button {
+            padding: 10px;
+            border: none;
+            background: #7289da;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #5b6eae;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h2>Users</h2>
+        <p>My Peer ID: <span id="peer-id">Generating...</span></p>
+        <p>Status: <span id="status">Initializing...</span></p>
+        <input type="text" id="peer-input" placeholder="Enter Peer ID to connect">
+        <button onclick="connectToPeer()">Connect</button>
+        <br><br>
+        <input type="text" id="name-input" placeholder="Enter your name">
+        <button onclick="setDisplayName()">Set Name</button>
+    </div>
+    
+    <div id="chat-container">
+        <div id="messages"></div>
+        <div id="input-container">
+            <input type="text" id="message" placeholder="Type a message">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        let peer, connection, displayName = "Anonymous";
+
+        function generateUUID() {
+            return crypto.randomUUID(); 
+        }
+
+        function setDisplayName() {
+            const nameInput = document.getElementById("name-input").value;
+            if (nameInput) {
+                displayName = nameInput;
+            }
+        }
+
+        async function initializePeer() {
+            const gun = GUN();
+            const SEA = Gun.SEA;
+
+            let keyPair = localStorage.getItem("keypair") ? JSON.parse(localStorage.getItem("keypair")) : await SEA.pair();
+            localStorage.setItem("keypair", JSON.stringify(keyPair));
+            document.getElementById("status").textContent = "Keys Loaded";
+
+            let peerId = localStorage.getItem("peerId") || generateUUID();
+            localStorage.setItem("peerId", peerId);
+            document.getElementById("peer-id").textContent = peerId;
+
+            peer = new Peer(peerId);
+            peer.on("open", id => {
+                document.getElementById("status").textContent = `Connected as ${id}`;
+                gun.get("users").get(id).put({ peerId: id });
+            });
+
+            peer.on("connection", conn => {
+                connection = conn;
+                setupConnection();
+            });
+        }
+
+        function connectToPeer() {
+            const peerId = document.getElementById("peer-input").value;
+            if (!peerId) return alert("Enter a Peer ID!");
+
+            connection = peer.connect(peerId);
+            setupConnection();
+        }
+
+        function setupConnection() {
+            connection.on("open", () => {
+                document.getElementById("status").textContent = `Connected to ${connection.peer}`;
+            });
+
+            connection.on("data", data => {
+                const messageDiv = document.getElementById("messages");
+                messageDiv.innerHTML += `<p><b>${data.name}:</b> ${data.message}</p>`;
+                messageDiv.scrollTop = messageDiv.scrollHeight;
+            });
+        }
+
+        function sendMessage() {
+            if (!connection || !connection.open) {
+                alert("Not connected to a peer!");
+                return;
+            }
+
+            const message = document.getElementById("message").value;
+            connection.send({ name: displayName, message });
+
+            const messageDiv = document.getElementById("messages");
+            messageDiv.innerHTML += `<p><b>${displayName}:</b> ${message}</p>`;
+            messageDiv.scrollTop = messageDiv.scrollHeight;
+
+            document.getElementById("message").value = "";
+        }
+
+        initializePeer();
+    </script>
+</body>
+</html>
